@@ -11,4 +11,4 @@ sudo ./xdp_prog_user -d ens33 --filename xdp_prog_kern.o --progname xdp_prog_mai
 sudo cat /sys/kernel/debug/tracing/trace_pipe
 
 ## Timeline
-11.18 Complete the writing of the command-line XDP firewall.
+2023.11.18 Complete the writing of the command-line XDP firewall.
