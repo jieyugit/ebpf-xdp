@@ -1,0 +1,3 @@
+test/
+bpf_use_errno_test.o
+module-read/

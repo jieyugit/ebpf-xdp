@@ -1,0 +1,51 @@
+Interface: ens33
+UpdateTime: 5
+Rules:
+  # - 
+  #   Enabled: 1
+  #   Action: 2
+  #   SrcIP: 192.168.52.132
+  #   DstIP: 10.0.0.1
+  #   MinTTL: 64
+  #   MaxTTL: 128
+  # - 
+  #   Enabled: 1
+  #   Action: 1
+  #   # SrcIP: 192.168.1.2
+  #   # DstIP: 10.0.0.2
+  #   SrcIP6: fe80::a9cf:44b4:bc6a:f3c5
+  #   DstIP6: fe80::a9cf:44b4:dead:beef
+  #   TCPEnabled: 1
+  #   TCPSport: 80
+  - author: yj
+    Id: 1
+    Enabled: 0
+    Action: 1
+    SrcIP: 192.168.52.1
+    TCPEnabled: 1
+    # TCPDport: 8081
+    TCPECE: 1
+  - author: yj
+    Id: 2
+    Enabled: 0
+    Action: 1
+    SrcIP: 192.168.52.132
+    ICMPEnabled: 1
+    ICMPType: 8
+  - author: yj
+    Id: 3
+    Enabled: 0
+    Action: 1
+    ICMPEnabled: 1
+    ICMPType: 8
+  # - Id: 2
+  #   Enabled: 0
+  #   Action: 1
+  #   ICMPEnabled: 1
+  #   ICMPType: 8
+  # - Id: 3
+  #   Enabled: 0
+  #   Action: 1
+  #   ICMPEnabled: 1
+  #   ICMPType: 8
+      
