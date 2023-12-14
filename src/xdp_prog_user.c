@@ -544,7 +544,7 @@ void updatefilters(Filters *cfg)
         //     printf("======>id = %d\n",cfg->rules[i].id);
         // }
         cfg->rules[i].id = i;
-        printf("id = %d\n",cfg->rules[i].id);
+        //printf("id = %d\n",cfg->rules[i].id);
         if (bpf_map_update_elem(filtersmap, &i, &cfg->rules[i], BPF_ANY) == -1)
         {
             fprintf(stderr, "Error updating BPF item #%d\n", i);
