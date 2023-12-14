@@ -64,7 +64,13 @@ sudo ./xdp_prog_user -d ens33 --filename xdp_prog_kern.o --progname xdp_prog_mai
 sudo cat /sys/kernel/debug/tracing/trace_pipe
 ```
 
-If you have changed the code, you're excepted to build the source code, run:
+
+
+- Modify the rule, you can edit the file in `/src/config.yaml`
+
+
+
+- If you have changed the code, you're excepted to build the source code, run:
 
 ```
 $ cd src

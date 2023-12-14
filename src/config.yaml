@@ -27,9 +27,9 @@ Rules:
     TCPECE: 1
   - author: yj
     Id: 2
-    Enabled: 0
+    Enabled: 1
     Action: 1
-    SrcIP: 192.168.52.132
+      #SrcIP: 192.168.52.136
     ICMPEnabled: 1
     ICMPType: 8
   - author: yj
