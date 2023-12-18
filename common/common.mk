@@ -110,7 +110,7 @@ $(COMMON_OBJS):	%.o: %.h
 
 $(USER_TARGETS): %: %.c  $(OBJECT_LIBBPF) $(OBJECT_LIBXDP) Makefile $(COMMON_MK) $(COMMON_OBJS) $(KERN_USER_H) $(EXTRA_DEPS)
 	$(QUIET_CC)$(CC) -Wall $(CFLAGS) $(LDFLAGS)  -o $@ $(COMMON_OBJS) $(LIB_OBJS)  \
-	 $< $(LDLIBS) -lyaml
+	 $< $(LDLIBS) -ljson-c
 
 $(XDP_OBJ): %.o: %.c  Makefile $(COMMON_MK) $(KERN_USER_H) $(EXTRA_DEPS) $(OBJECT_LIBBPF)
 	$(QUIET_CLANG)$(CLANG) -S \

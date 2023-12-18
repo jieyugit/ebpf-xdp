@@ -95,4 +95,5 @@ $ make
 - update steps of install and run the program
 - Add `run.sh` to run the program automatically
 
-
+### 2023.12.18
+- update format of rules

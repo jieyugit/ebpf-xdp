@@ -6,7 +6,7 @@ static const char *__doc__ = "XDP loader\n"
 
 
 
-#include <yaml.h>
+#include <json-c/json.h>
 #include "../src/xdpfw.h"
 #include <arpa/inet.h>
 
@@ -85,423 +85,247 @@ static const struct option_wrapper long_options[] = {
 
 int enable_count = 0;
 
-void parse_yaml_config(const char *filename, Filters *config)
+void parse_json_config(const char *filename, Filters *config)
 {
     FILE *file = fopen(filename, "r");
     if (!file)
     {
-        fprintf(stderr, "Failed to open the YAML configuration file.\n");
+        fprintf(stderr, "Failed to open the JSON configuration file.\n");
         exit(1);
     }
 
-    yaml_parser_t parser;
-    yaml_event_t event;
-    yaml_parser_initialize(&parser);
-    yaml_parser_set_input_file(&parser, file);
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
-    enum
+    char *buffer = malloc(size + 1);
+    fread(buffer, 1, size, file);
+    fclose(file);
+
+    buffer[size] = '\0';
+
+    json_object *root = json_tokener_parse(buffer);
+    free(buffer);
+
+    if (!root)
     {
-        NONE,
-        INTERFACE,
-        UPDATETIME,
-        ID,
-        RULES,
-        RULE,
-        ENABLED,
-        ACTION,
-        IP_ENABLED,
-        SRCIP,
-        DSTIP,
-        SRCIP6,
-        DSTIP6,
-        MIN_TTL,
-        MAX_TTL,
-        MAX_LEN,
-        MIN_LEN,
-        TOS,
-        BLOCKTIME,
-        TCP_ENABLED,
-        TCP_SPORT,
-        TCP_DPORT,
-        TCP_URG,
-        TCP_ACK,
-        TCP_RST,
-        TCP_PSH,
-        TCP_SYN,
-        TCP_FIN,
-        TCP_ECE,
-        TCP_CWR,
-        UDP_ENABLED,
-        UDP_SPORT,
-        UDP_DPORT,
-        ICMP_ENABLED,
-        ICMP_CODE,
-        ICMP_TYPE,
-        RULE_END
-        // Add more states as needed
-    } state = NONE;
+        fprintf(stderr, "JSON parsing error\n");
+        exit(1);
+    }
 
-    config->num_rules = 0;
-    config->rules = NULL;
+    json_object *interface_obj;
+    json_object_object_get_ex(root, "ens33", &interface_obj);
 
-    while (1)
+    if (!interface_obj)
     {
-        
-        if (!yaml_parser_parse(&parser, &event))
+        fprintf(stderr, "Interface 'ens33' not found in the JSON file.\n");
+        exit(1);
+    }
+
+    int num_rules = json_object_array_length(interface_obj);
+    config->num_rules = num_rules;
+    config->rules = malloc(sizeof(struct filter) * num_rules);
+
+    for (int i = 0; i < num_rules; ++i)
+    {
+        json_object *rule_obj = json_object_array_get_idx(interface_obj, i);
+
+        config->rules[i].id = json_object_get_int(json_object_object_get(rule_obj, "Id"));
+        config->rules[i].action = json_object_get_int(json_object_object_get(rule_obj, "Action"));
+        config->rules[i].enabled = json_object_get_int(json_object_object_get(rule_obj, "Enabled"));
+        config->rules[i].srcip = 0;
+        config->rules[i].dstip =0;
+        for (int j = 0; j < 4; j++)
         {
-            fprintf(stderr, "YAML parsing error\n");
-            exit(1);
+            config->rules[i].srcip6[j] = 0;
+            config->rules[i].dstip6[j] = 0;
         }
 
-        if (event.type == YAML_STREAM_END_EVENT)
-        {
-            break;
-        }
 
-        if (event.type == YAML_SCALAR_EVENT)
-        {
-
-            const char *value = (const char *)event.data.scalar.value;
-            switch (state)
+        if (json_object_object_get(rule_obj, "IPEnabled")!=0){
+            config->rules[i].ip_enabled = json_object_get_int(json_object_object_get(rule_obj, "IPEnabled"));
+            if (json_object_object_get(rule_obj, "SrcIP")!=0){
+                config->rules[i].srcip = inet_addr(json_object_get_string(json_object_object_get(rule_obj, "SrcIP")));
+            }
+            if (json_object_object_get(rule_obj, "DstIP")!=0){
+                config->rules[i].dstip = inet_addr(json_object_get_string(json_object_object_get(rule_obj, "DstIP")));
+            }
+            // SrcIP6
+            if (json_object_object_get(rule_obj, "SrcIP6") != 0)
             {
-            case NONE:
-                if (strcmp(value, "Interface") == 0)
+                struct in6_addr in6;
+                inet_pton(AF_INET6, json_object_get_string(json_object_object_get(rule_obj, "SrcIP6")), &in6);
+                for (int j = 0; j < 4; j++)
                 {
-                    state = INTERFACE;
+                    config->rules[i].srcip6[j] = in6.s6_addr32[j];
                 }
-                else if (strcmp(value, "UpdateTime") == 0)
-                {
-                    state = UPDATETIME;
-                }
-                else if (strcmp(value, "Rules") == 0)
-                {
-                    state = RULES;
-                }
-                break;
+            }
 
-            case INTERFACE:
-                
-                config->interface = strcpy(malloc(strlen(value) + 1), value);
-                //printf("%s\n",config->interface);
-                state = NONE;
-                break;
+            // DstIP6
+            if (json_object_object_get(rule_obj, "DstIP6") != 0)
+            {
+                struct in6_addr in6;
+                inet_pton(AF_INET6, json_object_get_string(json_object_object_get(rule_obj, "DstIP6")), &in6);
+                for (int j = 0; j < 4; j++)
+                {
+                    config->rules[i].dstip6[j] = in6.s6_addr32[j];
+                }
+            }
 
-            case UPDATETIME:
-                config->updatetime = atoi(value);
-                state = NONE;
-                break;
+            // MinTTL
+            if (json_object_object_get(rule_obj, "MinTTL") != 0)
+            {
+                config->rules[i].do_min_ttl = 1;
+                config->rules[i].min_ttl = json_object_get_int(json_object_object_get(rule_obj, "MinTTL"));
+            }
 
-            case RULES:
-                
-                if (event.type == YAML_SCALAR_EVENT)
-                {
-                    state = RULE;
-                    config->num_rules++;
-                    config->rules = realloc(config->rules, sizeof(struct filter) * config->num_rules);
-                    memset(&config->rules[config->num_rules - 1], 0, sizeof(struct filter));
-                }
-                break;
-            case RULE:
-                
-                if (event.type == YAML_MAPPING_END_EVENT)
-                {
-                    printf("hello\n");
-                    state = RULES;
-                }
-                else if (strcmp(value, "Id") == 0){
-                    state = ID;
-                }
-                else if (strcmp(value, "Enabled") == 0)
-                {
-                    
-                    enable_count++;
-                    if (enable_count != config->num_rules - 1)
-                    {
-                        config->num_rules++;
-                        config->rules = realloc(config->rules, sizeof(struct filter) * config->num_rules);
-                        memset(&config->rules[config->num_rules - 1], 0, sizeof(struct filter));
+            // MaxTTL
+            if (json_object_object_get(rule_obj, "MaxTTL") != 0)
+            {
+                config->rules[i].do_max_ttl = 1;
+                config->rules[i].max_ttl = json_object_get_int(json_object_object_get(rule_obj, "MaxTTL"));
+            }
 
-                    }
-                    state = ENABLED;
-                }
-                else if (strcmp(value, "Action") == 0)
-                {
-                    state = ACTION;
-                }
-                else if (strcmp(value, "IPEnabled") == 0)
-                {
-                    state = IP_ENABLED;
-                }
-                else if (strcmp(value, "SrcIP") == 0)
-                {
-                    state = SRCIP;
-                }
-                else if (strcmp(value, "DstIP") == 0)
-                {
-                    state = DSTIP;
-                }
-                else if (strcmp(value, "SrcIP6") == 0)
-                {
-                    state = SRCIP6;
-                }
-                else if (strcmp(value, "DstIP6") == 0)
-                {
-                    state = DSTIP6;
-                }
-                else if (strcmp(value, "MinTTL") == 0)
-                {
-                    state = MIN_TTL;
-                }
-                else if (strcmp(value, "MaxTTL") == 0)
-                {
-                    state = MAX_TTL;
-                }
-                else if (strcmp(value, "MaxLen") == 0)
-                {
-                    state = MAX_LEN;
-                }
-                else if (strcmp(value, "MinLen") == 0)
-                {
-                    state = MIN_LEN;
-                }
-                else if (strcmp(value, "TOS") == 0)
-                {
-                    state = TOS;
-                }
-                else if (strcmp(value, "TCPEnabled") == 0)
-                {
-                    state = TCP_ENABLED;
-                }
-                else if (strcmp(value, "TCPSport") == 0)
-                {
-                    state = TCP_SPORT;
-                }
-                else if (strcmp(value, "TCPDport") == 0)
-                {
-                    state = TCP_DPORT;
-                }
-                else if (strcmp(value, "TCPURG") == 0)
-                {
-                    state = TCP_URG;
-                }
-                else if (strcmp(value, "TCPACK") == 0)
-                {
-                    state = TCP_ACK;
-                }
-                else if (strcmp(value, "TCPRST") == 0)
-                {
-                    state = TCP_RST;
-                }
-                else if (strcmp(value, "TCPPSH") == 0)
-                {
-                    state = TCP_PSH;
-                }
-                else if (strcmp(value, "TCPSYN") == 0)
-                {
-                    state = TCP_SYN;
-                }
-                else if (strcmp(value, "TCPFIN") == 0)
-                {
-                    state = TCP_FIN;
-                }
-                else if (strcmp(value, "TCPECE") == 0)
-                {
-                    state = TCP_ECE;
-                }
-                else if (strcmp(value, "TCPCWR") == 0)
-                {
-                    state = TCP_CWR;
-                }
-                else if (strcmp(value, "UDPEnabled") == 0)
-                {
-                    state = UDP_ENABLED;
-                }
-                else if (strcmp(value, "UDPSport") == 0)
-                {
-                    state = UDP_SPORT;
-                }
-                else if (strcmp(value, "UDPDport") == 0)
-                {
-                    state = UDP_DPORT;
-                }
-                else if (strcmp(value, "ICMPEnabled") == 0)
-                {
-                    state = ICMP_ENABLED;
-                }
-                else if (strcmp(value, "ICMPCode") == 0)
-                {
-                    state = ICMP_CODE;
-                }
-                else if (strcmp(value, "ICMPType") == 0)
-                {
-                    state = ICMP_TYPE;
-                }
+            // MaxLen
+            if (json_object_object_get(rule_obj, "MaxLen") != 0)
+            {
+                config->rules[i].do_max_len = 1;
+                config->rules[i].max_len = json_object_get_int(json_object_object_get(rule_obj, "MaxLen"));
+            }
 
-                break;
-            case ID:
-                config->rules[config->num_rules - 1].id = config->num_rules-1;
-                state = RULE;
-                break;
-            case ENABLED:
+            // MinLen
+            if (json_object_object_get(rule_obj, "MinLen") != 0)
+            {
+                config->rules[i].do_min_len = 1;
+                config->rules[i].min_len = json_object_get_int(json_object_object_get(rule_obj, "MinLen"));
+            }
 
-                config->rules[config->num_rules - 1].enabled = atoi(value);
-                
-                //printf("2flag ===> id = %d\n",config->rules[config->num_rules - 1].id);
-                state = RULE;
-                break;
-            case ACTION:
-                config->rules[config->num_rules - 1].action = atoi(value);
-                state = RULE;
-                break;
-            case IP_ENABLED:
-                config->rules[config->num_rules - 1].ip_enabled = atoi(value);
-                state = RULE;
-                break;
-            case SRCIP:
-                config->rules[config->num_rules - 1].srcip = inet_addr(value);
-                state = RULE;
-                break;
-            case DSTIP:
-                config->rules[config->num_rules - 1].dstip = inet_addr(value);
-                state = RULE;
-                break;
-            case SRCIP6:
-                struct in6_addr in;
+            // TOS
+            if (json_object_object_get(rule_obj, "TOS") != 0)
+            {
+                config->rules[i].do_tos = 1;
+                config->rules[i].tos = json_object_get_int(json_object_object_get(rule_obj, "TOS"));
+            }
+        }
+        
 
-                inet_pton(AF_INET6, value, &in);
-                for (__u8 j = 0; j < 4; j++)
-                {
-                    config->rules[config->num_rules - 1].srcip6[j] = in.__in6_u.__u6_addr32[j];
-                    //printf("ip6_addr.__in6_u.__u6_addr32[%d] = %x\n", j, ntohl(in.__in6_u.__u6_addr32[j]));
-                }
-                state = RULE;
-                break;
-            case DSTIP6:
-                struct in6_addr des;
+        if (json_object_object_get(rule_obj, "TCPEnabled")!=0){
+            config->rules[i].tcpopts.enabled = json_object_get_int(json_object_object_get(rule_obj, "TCPEnabled"));
+            // TCPSport
+            if (json_object_object_get(rule_obj, "TCPSport") != 0)
+            {
+                config->rules[i].tcpopts.do_sport = 1;
+                config->rules[i].tcpopts.sport = json_object_get_int(json_object_object_get(rule_obj, "TCPSport"));
+            }
 
-                inet_pton(AF_INET6, value, &des);
-                for (__u8 j = 0; j < 4; j++)
-                {
-                    config->rules[config->num_rules - 1].dstip6[j] = des.__in6_u.__u6_addr32[j];
-                }
-                state = RULE;
-                break;
-            case MIN_TTL:
-                config->rules[config->num_rules - 1].do_min_ttl = 1;
-                config->rules[config->num_rules - 1].min_ttl = atoi(value);
-                state = RULE;
-                break;
-            case MAX_TTL:
-                config->rules[config->num_rules - 1].do_max_ttl = 1;
-                config->rules[config->num_rules - 1].max_ttl = atoi(value);
-                state = RULE;
-                break;
-            case MAX_LEN:
-                config->rules[config->num_rules - 1].do_max_len = 1;
-                config->rules[config->num_rules - 1].max_len = atoi(value);
-                state = RULE;
-                break;
-            case MIN_LEN:
-                config->rules[config->num_rules - 1].do_min_len = 1;
-                config->rules[config->num_rules - 1].min_len = atoi(value);
-                state = RULE;
-                break;
-            case TOS:
-                config->rules[config->num_rules - 1].do_tos = 1;
-                config->rules[config->num_rules - 1].tos = atoi(value);
-                state = RULE;
-                break;
-            case TCP_ENABLED:
+            // TCPDport
+            if (json_object_object_get(rule_obj, "TCPDport") != 0)
+            {
+                config->rules[i].tcpopts.do_dport = 1;
+                config->rules[i].tcpopts.dport = json_object_get_int(json_object_object_get(rule_obj, "TCPDport"));
+            }
 
-                config->rules[config->num_rules - 1].tcpopts.enabled = atoi(value);
-                state = RULE;
-                break;
-            case TCP_SPORT:
-                config->rules[config->num_rules - 1].tcpopts.do_sport = 1;
-                config->rules[config->num_rules - 1].tcpopts.sport = atoi(value);
-                state = RULE;
-                break;
-            case TCP_DPORT:
-                config->rules[config->num_rules - 1].tcpopts.do_dport = 1;
-                config->rules[config->num_rules - 1].tcpopts.dport = atoi(value);
-                state = RULE;
-                break;
-            case TCP_URG:
-                config->rules[config->num_rules - 1].tcpopts.do_urg = 1;
-                config->rules[config->num_rules - 1].tcpopts.urg = atoi(value);
-                state = RULE;
-                break;
-            case TCP_ACK:
-                config->rules[config->num_rules - 1].tcpopts.do_ack = 1;
-                config->rules[config->num_rules - 1].tcpopts.ack = atoi(value);
-                state = RULE;
-                break;
-            case TCP_RST:
-                config->rules[config->num_rules - 1].tcpopts.do_rst = 1;
-                config->rules[config->num_rules - 1].tcpopts.rst = atoi(value);
-                state = RULE;
-                break;
-            case TCP_PSH:
-                config->rules[config->num_rules - 1].tcpopts.do_psh = 1;
-                config->rules[config->num_rules - 1].tcpopts.psh = atoi(value);
-                state = RULE;
-                break;
-            case TCP_SYN:
-                config->rules[config->num_rules - 1].tcpopts.do_syn = 1;
-                config->rules[config->num_rules - 1].tcpopts.syn = atoi(value);
-                state = RULE;
-                break;
-            case TCP_FIN:
-                config->rules[config->num_rules - 1].tcpopts.do_fin = 1;
-                config->rules[config->num_rules - 1].tcpopts.fin = atoi(value);
-                state = RULE;
-                break;
-            case TCP_ECE:
-                config->rules[config->num_rules - 1].tcpopts.do_ece = 1;
-                config->rules[config->num_rules - 1].tcpopts.ece = atoi(value);
-                state = RULE;
-                break;
-            case TCP_CWR:
-                config->rules[config->num_rules - 1].tcpopts.do_cwr = 1;
-                config->rules[config->num_rules - 1].tcpopts.cwr = atoi(value);
-                state = RULE;
-                break;
-            case UDP_ENABLED:
-                config->rules[config->num_rules - 1].udpopts.enabled = atoi(value);
-                state = RULE;
-                break;
-            case UDP_SPORT:
-                config->rules[config->num_rules - 1].udpopts.do_sport = 1;
-                config->rules[config->num_rules - 1].udpopts.sport = atoi(value);
-                state = RULE;
-                break;
-            case UDP_DPORT:
-                config->rules[config->num_rules - 1].udpopts.do_dport = 1;
-                config->rules[config->num_rules - 1].udpopts.dport = atoi(value);
-                state = RULE;
-                break;
-            case ICMP_ENABLED:
-                config->rules[config->num_rules - 1].icmpopts.enabled = atoi(value);
-                state = RULE;
-                break;
-            case ICMP_CODE:
-                config->rules[config->num_rules - 1].icmpopts.do_code = 1;
-                config->rules[config->num_rules - 1].icmpopts.code = atoi(value);
-                state = RULE;
-                break;
-            case ICMP_TYPE:
-                config->rules[config->num_rules - 1].icmpopts.do_type = 1;
-                config->rules[config->num_rules - 1].icmpopts.type = atoi(value);
-                state = RULE;
-                break;
+            // TCPURG
+            if (json_object_object_get(rule_obj, "TCPURG") != 0)
+            {
+                config->rules[i].tcpopts.do_urg = 1;
+                config->rules[i].tcpopts.urg = json_object_get_int(json_object_object_get(rule_obj, "TCPURG"));
+            }
+
+            // TCPACK
+            if (json_object_object_get(rule_obj, "TCPACK") != 0)
+            {
+                config->rules[i].tcpopts.do_ack = 1;
+                config->rules[i].tcpopts.ack = json_object_get_int(json_object_object_get(rule_obj, "TCPACK"));
+            }
+
+            // TCPRST
+            if (json_object_object_get(rule_obj, "TCPRST") != 0)
+            {
+                config->rules[i].tcpopts.do_rst = 1;
+                config->rules[i].tcpopts.rst = json_object_get_int(json_object_object_get(rule_obj, "TCPRST"));
+            }
+
+            // TCPPSH
+            if (json_object_object_get(rule_obj, "TCPPSH") != 0)
+            {
+                config->rules[i].tcpopts.do_psh = 1;
+                config->rules[i].tcpopts.psh = json_object_get_int(json_object_object_get(rule_obj, "TCPPSH"));
+            }
+
+            // TCPSYN
+            if (json_object_object_get(rule_obj, "TCPSYN") != 0)
+            {
+                config->rules[i].tcpopts.do_syn = 1;
+                config->rules[i].tcpopts.syn = json_object_get_int(json_object_object_get(rule_obj, "TCPSYN"));
+            }
+
+            // TCPFIN
+            if (json_object_object_get(rule_obj, "TCPFIN") != 0)
+            {
+                config->rules[i].tcpopts.do_fin = 1;
+                config->rules[i].tcpopts.fin = json_object_get_int(json_object_object_get(rule_obj, "TCPFIN"));
+            }
+
+            // TCPECE
+            if (json_object_object_get(rule_obj, "TCPECE") != 0)
+            {
+                config->rules[i].tcpopts.do_ece = 1;
+                config->rules[i].tcpopts.ece = json_object_get_int(json_object_object_get(rule_obj, "TCPECE"));
+            }
+
+            // TCPCWR
+            if (json_object_object_get(rule_obj, "TCPCWR") != 0)
+            {
+                config->rules[i].tcpopts.do_cwr = 1;
+                config->rules[i].tcpopts.cwr = json_object_get_int(json_object_object_get(rule_obj, "TCPCWR"));
             }
         }
 
-        yaml_event_delete(&event);
+        if (json_object_object_get(rule_obj, "UDPEnabled")!=0){
+            config->rules[i].udpopts.enabled = json_object_get_int(json_object_object_get(rule_obj, "UDPEnabled"));
+            if (json_object_object_get(rule_obj, "UDPSport") != 0)
+            {
+                config->rules[i].udpopts.do_sport = 1;
+                config->rules[i].udpopts.sport = json_object_get_int(json_object_object_get(rule_obj, "UDPSport"));
+            }
+
+            // UDPDport
+            if (json_object_object_get(rule_obj, "UDPDport") != 0)
+            {
+                config->rules[i].udpopts.do_dport = 1;
+                config->rules[i].udpopts.dport = json_object_get_int(json_object_object_get(rule_obj, "UDPDport"));
+            }
+        }
+
+        if (json_object_object_get(rule_obj, "ICMPEnabled")!=0){
+            config->rules[i].icmpopts.enabled = json_object_get_int(json_object_object_get(rule_obj, "ICMPEnabled"));
+            if (json_object_object_get(rule_obj, "ICMPEnabled") != 0)
+            {
+                config->rules[i].icmpopts.enabled = json_object_get_int(json_object_object_get(rule_obj, "ICMPEnabled"));
+            }
+
+            // ICMPCode
+            if (json_object_object_get(rule_obj, "ICMPCode") !=0)
+            {
+                config->rules[i].icmpopts.do_code = 1;
+                config->rules[i].icmpopts.code = json_object_get_int(json_object_object_get(rule_obj, "ICMPCode"));
+            }
+
+            // ICMPType
+            if (json_object_object_get(rule_obj, "ICMPType") != 0)
+            {
+                config->rules[i].icmpopts.do_type = 1;
+                config->rules[i].icmpopts.type = json_object_get_int(json_object_object_get(rule_obj, "ICMPType"));
+            }
+        }
+        printf("%d",config->rules[i].srcip==NULL);
+        // Print or use the parsed values as needed
+        printf("Rule %u: Action=%d, Enabled=%d, SrcIP=%s, DstIP=%s\n", config->rules[i].id, config->rules[i].action, config->rules[i].enabled,
+               inet_ntoa(*(struct in_addr *)&config->rules[i].srcip), inet_ntoa(*(struct in_addr *)&config->rules[i].dstip));
     }
 
-    yaml_parser_delete(&parser);
-    fclose(file);
+    json_object_put(root);
 }
 
 void free_config(Filters *config)
@@ -511,15 +335,16 @@ void free_config(Filters *config)
 }
 
 
-Filters* readFile(const char* filename){
-    Filters* config = malloc(sizeof(Filters));
+Filters *readFile(const char *filename)
+{
+    Filters *config = malloc(sizeof(Filters));
     config->interface = NULL;
     config->updatetime = 0;
     config->num_rules = 0;
     config->rules = NULL;
 
-    // Parse the YAML configuration file
-    parse_yaml_config(filename, config);
+    // ½âÎö JSON ÅäÖÃÎÄ¼þ
+    parse_json_config(filename, config);
 
     return config;
 }
@@ -885,7 +710,7 @@ int main(int argc, char **argv)
     int cpus = get_nprocs_conf();
 	
 
-	Filters* filterFile = readFile("config.yaml");
+	Filters* filterFile = readFile("../../config.json");
 	
 	// Update BPF maps.
 	updatefilters(filterFile);
@@ -911,12 +736,12 @@ int main(int argc, char **argv)
         // Get current time.
         time_t curTime = time(NULL);
 
-
+        filterFile->updatetime=5;
         // Check for auto-update.
         if (filterFile->updatetime > 0 && (curTime - lastupdatecheck) > filterFile->updatetime)
         {
 			printf("update!\n");
-            filterFile = readFile("config.yaml");
+            filterFile = readFile("../../config.json");
             updatefilters(filterFile);
             // Check if config file have been modified
             // if (stat(cmd.cfgfile, &conf_stat) == 0 && conf_stat.st_mtime > lastupdated) {

@@ -424,7 +424,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
             
             
             // Source address.
-            if (filter->srcip && iph->saddr != filter->srcip)
+            if (filter->srcip!=0 && iph->saddr != filter->srcip)
             {
                 //bpf_printk("filter->srcip\n");
                 continue;
