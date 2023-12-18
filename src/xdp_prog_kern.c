@@ -372,7 +372,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
         {
             continue;
         }
-
+        
         // Do specific IPv6.
         if (ip6h)
         {
@@ -422,6 +422,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
         else if (iph)
         {
             
+            //bpf_printk("1. = %d\n",filter->srcip==0);
             
             // Source address.
             if (filter->srcip!=0 && iph->saddr != filter->srcip)
@@ -433,7 +434,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
             // Destination address.
             if (filter->dstip != 0 && iph->daddr != filter->dstip)
             {
-                //bpf_printk("2filter->srcip\n");
+                bpf_printk("2filter->srcip\n");
                 continue;
             }
 
@@ -484,6 +485,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
         
 		if (filter->tcpopts.enabled)
         {
+            
             if (!tcph)
             {
                 continue;
@@ -570,12 +572,9 @@ int  xdp_prog_main(struct xdp_md *ctx)
             }
         }else if (filter->icmpopts.enabled){
             
-            if(icmph!=NULL){
-                
-            }
             if (icmph)
             {
-                
+                bpf_printk("hello\n");
                 // Code.
                 if (filter->icmpopts.do_code && filter->icmpopts.code != icmph->code)
                 {
@@ -609,7 +608,8 @@ int  xdp_prog_main(struct xdp_md *ctx)
         }
 
 		// Matched.
-        bpf_printk("Matched rule ID #%d.\n", filter->id-1);
+        bpf_printk("Matched rule ID #%d. action = %d\n", filter->id,filter->action);
+        
         action = filter->action;
         
         flag = 1;
@@ -618,11 +618,7 @@ int  xdp_prog_main(struct xdp_md *ctx)
 
     //matched!
     if(flag == 1){
-        // if(filter_id!=-1){
-        //     ////datarec->hit_id = filter_id;
-        //     bpf_printk("%d",filter_id);
-        // }   
-
+        flag = 0;
         return xdp_stats_record_action(ctx, action);
     }
 

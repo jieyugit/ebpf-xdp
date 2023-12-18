@@ -124,7 +124,7 @@ void parse_json_config(const char *filename, Filters *config)
 
     int num_rules = json_object_array_length(interface_obj);
     config->num_rules = num_rules;
-    config->rules = malloc(sizeof(struct filter) * num_rules);
+    config->rules = calloc(num_rules,sizeof(struct filter));
 
     for (int i = 0; i < num_rules; ++i)
     {
@@ -135,6 +135,10 @@ void parse_json_config(const char *filename, Filters *config)
         config->rules[i].enabled = json_object_get_int(json_object_object_get(rule_obj, "Enabled"));
         config->rules[i].srcip = 0;
         config->rules[i].dstip =0;
+        config->rules[i].ip_enabled =0;
+        // config->rules[i].tcpopts.enabled =0;
+        // config->rules[i].updopts.enabled =0;
+        // config->rules[i].icmpopts.enabled =0;
         for (int j = 0; j < 4; j++)
         {
             config->rules[i].srcip6[j] = 0;
@@ -321,8 +325,8 @@ void parse_json_config(const char *filename, Filters *config)
         }
         printf("%d",config->rules[i].srcip==NULL);
         // Print or use the parsed values as needed
-        printf("Rule %u: Action=%d, Enabled=%d, SrcIP=%s, DstIP=%s\n", config->rules[i].id, config->rules[i].action, config->rules[i].enabled,
-               inet_ntoa(*(struct in_addr *)&config->rules[i].srcip), inet_ntoa(*(struct in_addr *)&config->rules[i].dstip));
+        printf("Rule %u: Action=%d, Enabled=%d, SrcIP=%s, DstIP=%s, ICMPEnabled=%d, ICMPCode=%d, ICMPType=%d\n", config->rules[i].id, config->rules[i].action, config->rules[i].enabled,
+               inet_ntoa(*(struct in_addr *)&config->rules[i].srcip), inet_ntoa(*(struct in_addr *)&config->rules[i].dstip),config->rules[i].icmpopts.enabled, config->rules[i].icmpopts.code, config->rules[i].icmpopts.type);
     }
 
     json_object_put(root);
