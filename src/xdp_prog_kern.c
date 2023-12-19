@@ -247,11 +247,6 @@ int  xdp_prog_main(struct xdp_md *ctx)
     //struct packet_info *info;
     //__u32 filter_id = -1;
 	int flag = 0;
-    
-
-    
-    
-
     /* Packet parsing in steps: Get each header one at a time, aborting if
 	 * parsing fails. Each helper function does sanity checking (is the
 	 * header type in the packet correct?), and bounds checking.
@@ -360,8 +355,6 @@ int  xdp_prog_main(struct xdp_md *ctx)
 		// Check if ID is above 0 (if 0, it's an invalid rule).
         if (!filter || filter->id < 0)
         {
-            
-            
             break;
         }
         

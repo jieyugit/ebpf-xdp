@@ -148,12 +148,18 @@ void parse_json_config(const char *filename, Filters *config)
 
         if (json_object_object_get(rule_obj, "IPEnabled")!=0){
             config->rules[i].ip_enabled = json_object_get_int(json_object_object_get(rule_obj, "IPEnabled"));
+            printf("IPEnabled! value = %d\n",config->rules[i].ip_enabled);
+            
             if (json_object_object_get(rule_obj, "SrcIP")!=0){
                 config->rules[i].srcip = inet_addr(json_object_get_string(json_object_object_get(rule_obj, "SrcIP")));
             }
             if (json_object_object_get(rule_obj, "DstIP")!=0){
-                config->rules[i].dstip = inet_addr(json_object_get_string(json_object_object_get(rule_obj, "DstIP")));
+                char *ip4DestString = json_object_get_string(json_object_object_get(rule_obj, "DstIP"));
+                inet_pton(AF_INET, ip4DestString, &config->rules[i].dstip);
+                 //= inet_addr(json_object_get_string(json_object_object_get(rule_obj, "DstIP")));
+                
             }
+            
             // SrcIP6
             if (json_object_object_get(rule_obj, "SrcIP6") != 0)
             {
@@ -323,10 +329,15 @@ void parse_json_config(const char *filename, Filters *config)
                 config->rules[i].icmpopts.type = json_object_get_int(json_object_object_get(rule_obj, "ICMPType"));
             }
         }
-        printf("%d",config->rules[i].srcip==NULL);
+        
+        char srcip_buffer[INET_ADDRSTRLEN];
+        char dstip_buffer[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(config->rules[i].srcip), srcip_buffer, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(config->rules[i].dstip), dstip_buffer, INET_ADDRSTRLEN);
         // Print or use the parsed values as needed
-        printf("Rule %u: Action=%d, Enabled=%d, SrcIP=%s, DstIP=%s, ICMPEnabled=%d, ICMPCode=%d, ICMPType=%d\n", config->rules[i].id, config->rules[i].action, config->rules[i].enabled,
-               inet_ntoa(*(struct in_addr *)&config->rules[i].srcip), inet_ntoa(*(struct in_addr *)&config->rules[i].dstip),config->rules[i].icmpopts.enabled, config->rules[i].icmpopts.code, config->rules[i].icmpopts.type);
+        printf("Rule %u: Action=%d, Enabled=%d, SrcIP=%s, DstIP=%s\n", config->rules[i].id, config->rules[i].action, 
+                config->rules[i].enabled, srcip_buffer, dstip_buffer);
+        
     }
 
     json_object_put(root);
