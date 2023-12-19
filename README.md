@@ -97,3 +97,7 @@ $ make
 
 ### 2023.12.18
 - update format of rules
+
+## Reference
+- xdp-project,  [xdp-tutorial](https://github.com/xdp-project/xdp-tutorial)
+- gamemann, [XDP-Firewall](https://github.com/gamemann/XDP-Firewall)
